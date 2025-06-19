@@ -11,20 +11,26 @@ use crate::{
     position::{GameResult, Position},
 };
 
-const FG_RED: &str = "\x1b[31m";
-const FG_YELLOW: &str = "\x1b[33m";
 const CLR_RESET: &str = "\x1b[0m";
 
 pub(crate) fn play_game() {
-    const HUMAN: Player = Player::Yellow;
-    const COMPUTER: Player = Player::Red;
+    let human = prompt_human_side();
+    let computer = human.rev();
 
     let pos = &mut Position::new();
+    let mut computer_mv: Option<u8> = None;
 
     loop {
         let active_player = pos.active_player();
+
+        clear_screen();
         print_pos(pos);
-        println!();
+
+        if active_player == human {
+            if let Some(computer_mv) = computer_mv {
+                print_computer_move(computer_mv, computer.color());
+            }
+        }
 
         match pos.result() {
             GameResult::Loss => {
@@ -36,15 +42,14 @@ pub(crate) fn play_game() {
                 break;
             }
             GameResult::None => {
-                match active_player {
-                    HUMAN => {
-                        let mv = prompt_move(&pos.legal_moves());
-                        pos.play_move(mv);
-                    }
-                    COMPUTER => {
-                        play_computer_move(pos);
-                    }
-                };
+                if active_player == human {
+                    let mv = prompt_move(&pos.legal_moves(), human.color());
+                    pos.play_move(mv);
+                } else {
+                    println!("{}Thinking...{}", computer.color(), CLR_RESET);
+                    let mv = play_computer_move(pos);
+                    computer_mv = Some(mv);
+                }
 
                 println!();
             }
@@ -52,22 +57,40 @@ pub(crate) fn play_game() {
     }
 }
 
-fn play_computer_move(pos: &mut Position) {
-    println!("{}Thinking...{}", FG_RED, CLR_RESET);
+fn prompt_human_side() -> Player {
+    let index = Select::new()
+        .with_prompt("Choose your color")
+        .item(Player::Yellow.symbol())
+        .item(Player::Red.symbol())
+        .interact()
+        .unwrap();
+
+    match index {
+        0 => Player::Yellow,
+        1 => Player::Red,
+        _ => panic!("Invalid player color."),
+    }
+}
+
+fn play_computer_move(pos: &mut Position) -> u8 {
     let mv = get_best_move(pos);
     pos.play_move(mv);
+    mv
+}
+
+fn print_computer_move(mv: u8, color: &str) {
     println!(
-        "The computer played to: {}{}{}{}",
-        FG_RED,
+        "The computer played to {}{}{}{}.",
+        color,
         col_name_of(col_of(mv)),
         row_name_of(row_of(mv)),
         CLR_RESET
     );
 }
 
-fn prompt_move(legal_moves: &Vec<u8>) -> u8 {
-    let prompt = "What column will you play to?";
-    let prompt = format!("{}{}{}", FG_YELLOW, prompt, CLR_RESET);
+fn prompt_move(legal_moves: &Vec<u8>, color: &str) -> u8 {
+    let prompt = "Choose your move";
+    let prompt = format!("{}{}{}", color, prompt, CLR_RESET);
     let mut col_names: Vec<char> = vec![];
 
     for mv in legal_moves {
@@ -103,7 +126,7 @@ fn print_pos(pos: &Position) {
                 continue;
             }
 
-            print!("⚪");
+            print!("{}", Player::EMPTY_SYMBOL);
         }
 
         println!();
@@ -115,5 +138,9 @@ fn print_pos(pos: &Position) {
         print!("{} ", col_name_of(col));
     }
 
-    println!();
+    println!("\n");
+}
+
+fn clear_screen() {
+    print!("\x1B[2J\x1B[1;1H");
 }
